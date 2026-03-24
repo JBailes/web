@@ -1,0 +1,29 @@
+@* Collapsible story card component *@
+
+<div class="story-card @(IsOpen ? "open" : "")">
+    <div class="story-header" @onclick="Toggle">
+        <div style="flex:1">
+            <div class="story-era">@Era</div>
+            <div class="story-title">@Title</div>
+            <div class="story-teaser">@Teaser</div>
+            <span class="read-btn">Read story</span>
+        </div>
+        <span class="story-toggle">&#8964;</span>
+    </div>
+    <div class="story-body">
+        <div class="story-text">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Era { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Teaser { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsOpen { get; set; }
+
+    private void Toggle() => IsOpen = !IsOpen;
+}

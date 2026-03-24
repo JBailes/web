@@ -1,0 +1,55 @@
+@page "/acktng/who"
+@inject HttpClient Http
+
+<PageTitle>Who&rsquo;s Online &mdash; ACKmud Historical Archive</PageTitle>
+
+<h1>Who&rsquo;s Online</h1>
+<p class="muted">Live snapshot from in-game WHO output.</p>
+
+@if (_loading)
+{
+    <p class="muted">Loading&hellip;</p>
+}
+else if (_error)
+{
+    <p>Players online: 0</p>
+    <h2>Players Online</h2>
+    <ul></ul>
+}
+else
+{
+    <p>Players online: @_playerCount</p>
+    @((MarkupString)(_whoHtml ?? ""))
+}
+
+@code {
+    private bool _loading = true;
+    private bool _error;
+    private string? _whoHtml;
+    private int _playerCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/api/who");
+            if (response.IsSuccessStatusCode)
+            {
+                _whoHtml = await response.Content.ReadAsStringAsync();
+                _playerCount = _whoHtml.Split("<li>").Length - 1;
+            }
+            else
+            {
+                _error = true;
+            }
+        }
+        catch
+        {
+            _error = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

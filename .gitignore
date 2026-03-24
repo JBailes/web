@@ -1,0 +1,13 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+publish/
+
+# Node
+personal/node_modules/
+personal/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
