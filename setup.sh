@@ -76,7 +76,11 @@ if [ -d "${PUBLISH_DIR}/wol/wwwroot" ]; then
     echo "[setup] Note: update nginx root to ${PUBLISH_DIR}/wol/wwwroot"
 fi
 
-# ── 4. nginx config ───────────────────────────────────────────────────────────
+# ── 4. nginx permissions + config ────────────────────────────────────────────
+# nginx runs as www-data; allow it to traverse the home directory to reach
+# the publish/ and personal/dist/ directories (execute-only, not readable).
+chmod o+x /root
+
 echo "[setup] Installing nginx config..."
 cp "${WEB_DIR}/nginx/ackmud.conf" /etc/nginx/sites-available/ackmud.conf
 ln -sf /etc/nginx/sites-available/ackmud.conf /etc/nginx/sites-enabled/ackmud.conf
