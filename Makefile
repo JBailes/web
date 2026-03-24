@@ -1,4 +1,4 @@
-.PHONY: all clean test nginx-install nginx-reload certbot-acktng service-install renewal-hooks-install
+.PHONY: all clean test build-personal nginx-install nginx-reload certbot-acktng service-install renewal-hooks-install
 
 REPO_DIR := $(shell pwd)
 
@@ -60,6 +60,10 @@ service-install:
 	sudo systemctl daemon-reload
 	sudo systemctl enable web-server
 	sudo systemctl restart web-server
+
+# Build the personal site React SPA. Run after any changes to personal/src/.
+build-personal:
+	cd personal && npm run build
 
 clean:
 	@:

@@ -1,0 +1,117 @@
+:root {
+  --bg: #070b14;
+  --surface: #0f1623;
+  --card: #162032;
+  --card-border: rgba(79, 142, 247, 0.12);
+  --accent: #4f8ef7;
+  --accent-bright: #7eb3ff;
+  --accent-glow: rgba(79, 142, 247, 0.18);
+  --text: #e8f0ff;
+  --muted: #7a8fb5;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.glow {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 40%, rgba(79, 142, 247, 0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 20% 80%, rgba(79, 142, 247, 0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 3rem 3.5rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow:
+    0 0 0 1px rgba(79, 142, 247, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 32px 80px rgba(0, 0, 0, 0.3);
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  box-shadow: 0 0 0 4px rgba(79, 142, 247, 0.15);
+}
+
+h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1.1;
+  margin-bottom: 2rem;
+}
+
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.7rem 1.5rem;
+  background: var(--card);
+  border: 1px solid rgba(79, 142, 247, 0.2);
+  border-radius: 10px;
+  color: var(--accent-bright);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
+}
+
+.link-btn:hover {
+  background: rgba(79, 142, 247, 0.1);
+  border-color: rgba(79, 142, 247, 0.5);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(79, 142, 247, 0.15);
+}
