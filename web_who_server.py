@@ -27,7 +27,6 @@ LORE_DIR = ACKTNG_DIR / "lore"
 TEMPLATE_DIR = WEB_DIR / "templates"
 AHA_TEMPLATE_DIR = WEB_DIR / "aha" / "templates"
 WOL_TEMPLATE_DIR = WEB_DIR / "wol" / "templates"
-PERSONAL_TEMPLATE_DIR = WEB_DIR / "personal" / "templates"
 IMG_DIR = WEB_DIR / "img"
 MP3_DIR = WEB_DIR / "mp3"
 _AHA_WORLD_TARGETS = [
@@ -53,7 +52,6 @@ _logo_data_uri_lock = Lock()
 
 _WOL_TAGLINE = "AHA: World of Lore &mdash; A living world forged in text and tradition."
 _AHA_TAGLINE = "ACKmud Historical Archive &mdash; Preservation and interpretation of an enduring text-world tradition."
-_PERSONAL_TAGLINE = "Jared Bailes"
 
 _WOL_NAV = (
     "<nav>"
@@ -78,17 +76,12 @@ _AHA_NAV = (
     "</nav>"
 )
 
-_PERSONAL_NAV = "<nav><a href='/'>Home</a></nav>"
 
 
 def _get_site(headers: object) -> str:
-    """Return 'aha', 'personal', or 'wol' based on the Host header."""
+    """Return 'aha' for aha.ackmud.com, 'wol' for everything else."""
     host = (headers.get("Host", "") or "").lower().split(":")[0]  # type: ignore[attr-defined]
-    if host.startswith("aha."):
-        return "aha"
-    if host in ("bailes.us", "www.bailes.us"):
-        return "personal"
-    return "wol"
+    return "aha" if host.startswith("aha.") else "wol"
 
 
 class WhoRequestHandler(BaseHTTPRequestHandler):
@@ -114,8 +107,6 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
         if site == "wol":
             self._handle_wol_route(route, help_query)
-        elif site == "personal":
-            self._handle_personal_route(route)
         else:
             self._handle_aha_route(route, help_query)
 
@@ -126,18 +117,6 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
                 _build_wol_home_page(),
                 title="AHA: World of Lore",
                 site="wol",
-            )
-            return
-
-        self.send_error(404, "Not Found")
-
-    def _handle_personal_route(self, route: str) -> None:
-        """Routes served on bailes.us — personal landing page."""
-        if route in ("/",):
-            self._send_html(
-                _build_personal_home_page(),
-                title="Jared Bailes",
-                site="personal",
             )
             return
 
@@ -491,10 +470,6 @@ def _build_wol_home_page() -> str:
     return _load_template("home.html", WOL_TEMPLATE_DIR)
 
 
-def _build_personal_home_page() -> str:
-    return _load_template("home.html", PERSONAL_TEMPLATE_DIR)
-
-
 def _build_world_map_page() -> str:
     return _load_template("world_map.html", AHA_TEMPLATE_DIR)
 
@@ -560,12 +535,8 @@ def _read_cached_topic(path: Path) -> str:
 
 
 def _build_full_page(title: str, body: str, site: str = "wol") -> str:
-    if site == "aha":
-        tagline, nav = _AHA_TAGLINE, _AHA_NAV
-    elif site == "personal":
-        tagline, nav = _PERSONAL_TAGLINE, _PERSONAL_NAV
-    else:
-        tagline, nav = _WOL_TAGLINE, _WOL_NAV
+    tagline = _AHA_TAGLINE if site == "aha" else _WOL_TAGLINE
+    nav = _AHA_NAV if site == "aha" else _WOL_NAV
     template = _load_template("base.html")
     return (
         template.replace("__TITLE__", escape(title))
