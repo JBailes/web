@@ -25,6 +25,9 @@ HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
 LORE_DIR = ACKTNG_DIR / "lore"
 TEMPLATE_DIR = WEB_DIR / "templates"
+AHA_TEMPLATE_DIR = WEB_DIR / "aha" / "templates"
+WOL_TEMPLATE_DIR = WEB_DIR / "wol" / "templates"
+PERSONAL_TEMPLATE_DIR = WEB_DIR / "personal" / "templates"
 IMG_DIR = WEB_DIR / "img"
 MP3_DIR = WEB_DIR / "mp3"
 _AHA_WORLD_TARGETS = [
@@ -50,6 +53,7 @@ _logo_data_uri_lock = Lock()
 
 _WOL_TAGLINE = "AHA: World of Lore &mdash; A living world forged in text and tradition."
 _AHA_TAGLINE = "ACKmud Historical Archive &mdash; Preservation and interpretation of an enduring text-world tradition."
+_PERSONAL_TAGLINE = "Jared Bailes"
 
 _WOL_NAV = (
     "<nav>"
@@ -74,11 +78,17 @@ _AHA_NAV = (
     "</nav>"
 )
 
+_PERSONAL_NAV = "<nav><a href='/'>Home</a></nav>"
+
 
 def _get_site(headers: object) -> str:
-    """Return 'aha' for aha.ackmud.com, 'wol' for everything else."""
+    """Return 'aha', 'personal', or 'wol' based on the Host header."""
     host = (headers.get("Host", "") or "").lower().split(":")[0]  # type: ignore[attr-defined]
-    return "aha" if host.startswith("aha.") else "wol"
+    if host.startswith("aha."):
+        return "aha"
+    if host in ("bailes.us", "www.bailes.us"):
+        return "personal"
+    return "wol"
 
 
 class WhoRequestHandler(BaseHTTPRequestHandler):
@@ -104,6 +114,8 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
         if site == "wol":
             self._handle_wol_route(route, help_query)
+        elif site == "personal":
+            self._handle_personal_route(route)
         else:
             self._handle_aha_route(route, help_query)
 
@@ -114,6 +126,18 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
                 _build_wol_home_page(),
                 title="AHA: World of Lore",
                 site="wol",
+            )
+            return
+
+        self.send_error(404, "Not Found")
+
+    def _handle_personal_route(self, route: str) -> None:
+        """Routes served on bailes.us — personal landing page."""
+        if route in ("/",):
+            self._send_html(
+                _build_personal_home_page(),
+                title="Jared Bailes",
+                site="personal",
             )
             return
 
@@ -456,26 +480,30 @@ def _build_reference_page(active_tab: str, query: str = "", prefix: str = "") ->
 
 
 def _build_home_page() -> str:
-    return _load_template("home.html")
+    return _load_template("home.html", AHA_TEMPLATE_DIR)
 
 
 def _build_acktng_page() -> str:
-    return _load_template("acktng.html")
+    return _load_template("acktng.html", AHA_TEMPLATE_DIR)
 
 
 def _build_wol_home_page() -> str:
-    return _load_template("home_wol.html")
+    return _load_template("home.html", WOL_TEMPLATE_DIR)
+
+
+def _build_personal_home_page() -> str:
+    return _load_template("home.html", PERSONAL_TEMPLATE_DIR)
 
 
 def _build_world_map_page() -> str:
-    return _load_template("world_map.html")
+    return _load_template("world_map.html", AHA_TEMPLATE_DIR)
 
 
 def _build_stories_page() -> str:
-    stories_dir = TEMPLATE_DIR / "stories"
+    stories_dir = AHA_TEMPLATE_DIR / "stories"
     fragments = sorted(stories_dir.glob("*.html"))
     stories_html = "\n\n".join(p.read_text(encoding="utf-8", errors="replace") for p in fragments)
-    return _load_template("stories.html").replace("__STORIES__", stories_html)
+    return _load_template("stories.html", AHA_TEMPLATE_DIR).replace("__STORIES__", stories_html)
 
 
 def _build_mud_client_page(world_targets: list[dict]) -> str:
@@ -485,20 +513,21 @@ def _build_mud_client_page(world_targets: list[dict]) -> str:
         )
         for world in world_targets
     )
-    return _load_template("mud_client.html").replace("__WORLD_OPTIONS__", world_options)
+    return _load_template("mud_client.html", AHA_TEMPLATE_DIR).replace("__WORLD_OPTIONS__", world_options)
 
 
-def _load_template(name: str) -> str:
-    template_path = TEMPLATE_DIR / name
+def _load_template(name: str, template_dir: Path = TEMPLATE_DIR) -> str:
+    template_path = template_dir / name
+    cache_key = str(template_path)
     mtime_ns = template_path.stat().st_mtime_ns
 
     with _template_lock:
-        cached = _template_cache.get(name)
+        cached = _template_cache.get(cache_key)
         if cached is not None and cached[0] == mtime_ns:
             return cached[1]
 
         content = template_path.read_text(encoding="utf-8", errors="replace")
-        _template_cache[name] = (mtime_ns, content)
+        _template_cache[cache_key] = (mtime_ns, content)
         return content
 
 
@@ -531,8 +560,12 @@ def _read_cached_topic(path: Path) -> str:
 
 
 def _build_full_page(title: str, body: str, site: str = "wol") -> str:
-    tagline = _WOL_TAGLINE if site == "wol" else _AHA_TAGLINE
-    nav = _WOL_NAV if site == "wol" else _AHA_NAV
+    if site == "aha":
+        tagline, nav = _AHA_TAGLINE, _AHA_NAV
+    elif site == "personal":
+        tagline, nav = _PERSONAL_TAGLINE, _PERSONAL_NAV
+    else:
+        tagline, nav = _WOL_TAGLINE, _WOL_NAV
     template = _load_template("base.html")
     return (
         template.replace("__TITLE__", escape(title))
