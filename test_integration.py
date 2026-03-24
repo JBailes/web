@@ -130,6 +130,10 @@ class ServerIntegrationTest(unittest.TestCase):
         """Fetch a path from the AHA site (aha.ackmud.com)."""
         return self._get(path, host="aha.ackmud.com")
 
+    def _get_personal(self, path: str) -> tuple[int, str]:
+        """Fetch a path from the personal site (bailes.us)."""
+        return self._get(path, host="bailes.us")
+
     def _assert_ok_contains(self, path: str, *fragments: str, host: str = "ackmud.com") -> None:
         status, body = self._get(path, host=host)
         self.assertEqual(status, 200, f"Expected 200 for {path}, got {status}")
@@ -202,6 +206,36 @@ class ServerIntegrationTest(unittest.TestCase):
     def test_wol_has_aha_link(self) -> None:
         _, body = self._get("/")
         self.assertIn("aha.ackmud.com", body)
+
+    # ------------------------------------------------------------------
+    # Personal site (bailes.us)
+    # ------------------------------------------------------------------
+
+    def test_personal_home_200(self) -> None:
+        status, body = self._get_personal("/")
+        self.assertEqual(status, 200)
+        self.assertIn("Jared Bailes", body)
+
+    def test_personal_has_github_link(self) -> None:
+        _, body = self._get_personal("/")
+        self.assertIn("github.com/JBailes", body)
+
+    def test_personal_has_linkedin_link(self) -> None:
+        _, body = self._get_personal("/")
+        self.assertIn("linkedin.com/in/jaredbailes", body)
+
+    def test_personal_unknown_route_404(self) -> None:
+        status, _ = self._get_personal("/does-not-exist")
+        self.assertEqual(status, 404)
+
+    def test_personal_not_served_on_wol(self) -> None:
+        _, body = self._get("/")
+        self.assertNotIn("linkedin.com/in/jaredbailes", body)
+
+    def test_www_bailes_us_serves_personal(self) -> None:
+        status, body = self._get("/", host="www.bailes.us")
+        self.assertEqual(status, 200)
+        self.assertIn("Jared Bailes", body)
 
     # ------------------------------------------------------------------
     # AHA site (aha.ackmud.com)
