@@ -1,3 +1,7 @@
+using System.Runtime.CompilerServices;
+using AckWeb.Api;
+[assembly: InternalsVisibleTo("AckWeb.Tests")]
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpClient("game", c =>
@@ -18,35 +22,12 @@ var app = builder.Build();
 app.UseCors();
 
 // ── Directory layout ──────────────────────────────────────────────────────
+// Directories can be overridden via configuration (useful for tests).
 var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 var acktngDir = Path.Combine(homeDir, "acktng");
-var helpDir  = Path.Combine(acktngDir, "help");
-var shelpDir = Path.Combine(acktngDir, "shelp");
-var loreDir  = Path.Combine(acktngDir, "lore");
-
-static string? SafeTopicPath(string baseDir, string topic)
-{
-    var cleaned = topic.Trim().Trim('/');
-    if (string.IsNullOrEmpty(cleaned)) return null;
-    var candidate = Path.GetFullPath(Path.Combine(baseDir, cleaned));
-    if (!File.Exists(candidate)) return null;
-    if (!candidate.StartsWith(Path.GetFullPath(baseDir) + Path.DirectorySeparatorChar)) return null;
-    return candidate;
-}
-
-static string ExtractFirstLoreEntry(string content)
-{
-    var blocks = content.Split("\n---\n");
-    for (int i = 0; i < blocks.Length; i++)
-    {
-        if (blocks[i].TrimStart().StartsWith("keywords ") && i + 1 < blocks.Length)
-            return blocks[i + 1].Trim();
-    }
-    return content.Trim();
-}
-
-static string ResolveRefDir(string type, string helpDir, string shelpDir, string loreDir) =>
-    type switch { "shelp" => shelpDir, "lore" => loreDir, _ => helpDir };
+var helpDir  = app.Configuration["HelpDir"]  ?? Path.Combine(acktngDir, "help");
+var shelpDir = app.Configuration["ShelpDir"] ?? Path.Combine(acktngDir, "shelp");
+var loreDir  = app.Configuration["LoreDir"]  ?? Path.Combine(acktngDir, "lore");
 
 // ── GET /api/who ──────────────────────────────────────────────────────────
 app.MapGet("/api/who", async (IHttpClientFactory factory) =>
@@ -83,7 +64,7 @@ app.MapGet("/api/gsgp", async (IHttpClientFactory factory) =>
 // ── GET /api/reference/{type}?q= ─────────────────────────────────────────
 app.MapGet("/api/reference/{type}", (string type, string? q) =>
 {
-    var dir = ResolveRefDir(type, helpDir, shelpDir, loreDir);
+    var dir = ReferenceHelpers.ResolveRefDir(type, helpDir, shelpDir, loreDir);
     if (!Directory.Exists(dir))
         return Results.Json(Array.Empty<string>());
 
@@ -100,13 +81,15 @@ app.MapGet("/api/reference/{type}", (string type, string? q) =>
 // ── GET /api/reference/{type}/{topic} ─────────────────────────────────────
 app.MapGet("/api/reference/{type}/{topic}", (string type, string topic) =>
 {
-    var dir = ResolveRefDir(type, helpDir, shelpDir, loreDir);
-    var path = SafeTopicPath(dir, topic);
+    var dir = ReferenceHelpers.ResolveRefDir(type, helpDir, shelpDir, loreDir);
+    var path = ReferenceHelpers.SafeTopicPath(dir, topic);
     if (path is null) return Results.NotFound();
 
     var content = File.ReadAllText(path);
-    if (type == "lore") content = ExtractFirstLoreEntry(content);
+    if (type == "lore") content = ReferenceHelpers.ExtractFirstLoreEntry(content);
     return Results.Content(content, "text/plain; charset=utf-8");
 });
 
 app.Run();
+
+public partial class Program { } // for WebApplicationFactory

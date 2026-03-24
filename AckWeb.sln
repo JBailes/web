@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AckWeb.Client.Aha", "AckWeb
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AckWeb.Api", "AckWeb.Api\AckWeb.Api.csproj", "{95515E35-F75E-4B21-8D44-BBB760AA4DE5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AckWeb.Tests", "AckWeb.Tests\AckWeb.Tests.csproj", "{C458A644-E37B-4852-B879-C485165A4099}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{95515E35-F75E-4B21-8D44-BBB760AA4DE5}.Release|x64.Build.0 = Release|Any CPU
 		{95515E35-F75E-4B21-8D44-BBB760AA4DE5}.Release|x86.ActiveCfg = Release|Any CPU
 		{95515E35-F75E-4B21-8D44-BBB760AA4DE5}.Release|x86.Build.0 = Release|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Debug|x64.Build.0 = Debug|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Debug|x86.Build.0 = Debug|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Release|x64.ActiveCfg = Release|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Release|x64.Build.0 = Release|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Release|x86.ActiveCfg = Release|Any CPU
+		{C458A644-E37B-4852-B879-C485165A4099}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -35,12 +35,18 @@ if ! command -v dotnet &>/dev/null || ! dotnet --list-sdks | grep -q "^9\."; the
 fi
 
 # ── 2. Build personal React SPA ───────────────────────────────────────────────
-echo "[setup] Building personal React SPA..."
+echo "[setup] Building and testing personal React SPA..."
 cd "${WEB_DIR}/personal"
 npm install --silent
+npm test
 npm run build
 
 # ── 3. Publish Blazor WASM clients and API ────────────────────────────────────
+# ── 3a. Run .NET tests ────────────────────────────────────────────────────────
+echo "[setup] Running .NET tests..."
+dotnet test "${WEB_DIR}/AckWeb.sln" --configuration Release --no-build 2>/dev/null || \
+    dotnet test "${WEB_DIR}/AckWeb.sln" --configuration Release
+
 echo "[setup] Publishing AckWeb.Client.Aha..."
 dotnet publish "${WEB_DIR}/AckWeb.Client.Aha/AckWeb.Client.Aha.csproj" \
     --configuration Release \
