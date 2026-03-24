@@ -1,0 +1,1080 @@
+window.mudClientInit = () => {
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const worldSelect    = document.getElementById('world-select');
+  const connectBtn     = document.getElementById('connect-btn');
+  const disconnectBtn  = document.getElementById('disconnect-btn');
+  const mudStatus      = document.getElementById('mud-status');
+  const fullscreenBtn  = document.getElementById('fullscreen-btn');
+  const container      = document.getElementById('mud-client-container');
+  const mapWindow      = document.getElementById('map-window');
+  const mapCanvas      = document.getElementById('map-canvas');
+  const mapPlaceholder = document.getElementById('map-placeholder');
+  const roomWindow     = document.getElementById('room-window');
+  const roomContent    = document.getElementById('room-content');
+  const ioOutput       = document.getElementById('mud-output');
+  const commandInput   = document.getElementById('mud-command');
+  const sendBtn        = document.getElementById('send-btn');
+  const toggleMapBtn   = document.getElementById('toggle-map-btn');
+  const toggleRoomBtn  = document.getElementById('toggle-room-btn');
+  const toggleEquipBtn = document.getElementById('toggle-equip-btn');
+  const toggleInvBtn   = document.getElementById('toggle-inv-btn');
+  const toggleCharBtn  = document.getElementById('toggle-char-btn');
+  const equipWindow    = document.getElementById('equip-window');
+  const equipContent   = document.getElementById('equip-content');
+  const invWindow      = document.getElementById('inv-window');
+  const invContent     = document.getElementById('inv-content');
+  const charWindow     = document.getElementById('char-window');
+  const charContent    = document.getElementById('char-content');
+  const appraisePopup  = document.getElementById('appraise-popup');
+  const musicControls  = document.getElementById('music-controls');
+  const musicPlayBtn   = document.getElementById('music-play-btn');
+  const musicStopBtn   = document.getElementById('music-stop-btn');
+  const musicVolume    = document.getElementById('music-volume');
+  const musicLoop      = document.getElementById('music-loop');
+  const audio          = document.getElementById('mud-audio');
+  const audioNext      = document.getElementById('mud-audio-next');
+
+  // ── Runtime state ─────────────────────────────────────────────────────────
+  let socket         = null;
+  let protocolMode   = 'unknown'; // 'v1' | 'v2'
+  let fadeTimer      = null;
+  let mapWinClosed   = false;
+  let roomWinClosed  = false;
+  let equipWinClosed = true;
+  let invWinClosed   = true;
+  let charWinClosed  = true;
+
+  // Room live-data state
+  const roomState = {
+    name: '', description: '', exits: [],
+    mobs:    new Map(), // id    -> entity
+    players: new Map(), // name  -> entity
+    objects: new Map(), // id    -> entity
+    extras:  [],        // [{keyword, actions}]
+  };
+
+  // Map live-data state
+  const mapState = {
+    rooms:       new Map(), // id -> {id, rel_x, rel_y, terrain, exits, mob_count}
+    currentId:   null,
+    hasScouted:  false,
+    tileImages:  new Map(), // terrain -> HTMLImageElement | 'loading' | null
+    animFrame:   null,
+  };
+
+  // ── Terrain appearance ────────────────────────────────────────────────────
+  const TERRAIN_COLOR = {
+    city:'#4a5568', road:'#8b7355', forest:'#2d6a4f', deep_forest:'#1b4332',
+    field:'#52b788', hills:'#74c69d', mountain:'#6c757d', water_swim:'#4895ef',
+    water_noswim:'#023e8a', desert:'#e9c46a', cave:'#343a40', inside:'#495057',
+    air:'#90e0ef', underground:'#212529',
+  };
+  const TERRAIN_LABEL = {
+    city:'CITY', road:'ROAD', forest:'FRST', deep_forest:'DFST',
+    field:'FILD', hills:'HILL', mountain:'MNTN', water_swim:'WATR',
+    water_noswim:'DEEP', desert:'DSRT', cave:'CAVE', inside:'INSD',
+    air:'AIR', underground:'UNDR',
+  };
+
+  // ── ANSI → HTML ───────────────────────────────────────────────────────────
+  const ANSI_FG = {
+    30:'#222222',31:'#ff5f56',32:'#27c93f',33:'#ffbd2e',
+    34:'#61afef',35:'#c678dd',36:'#56b6c2',37:'#d7dae0',
+    90:'#7f848e',91:'#ff7b72',92:'#3fb950',93:'#e3b341',
+    94:'#79c0ff',95:'#d2a8ff',96:'#a5f3fc',97:'#f0f6fc',
+  };
+  const escHtml = s => s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+
+  // Convert ACK @@X color codes to HTML spans. Codes from const_color.c ansi_table.
+  const ACK_COLOR_STYLE = {
+    g:'color:#aaa',      R:'color:#c44',      G:'color:#4c4',
+    b:'color:#a60',      B:'color:#55f',      m:'color:#c4c',
+    c:'color:#4cc',      k:'color:#555',      y:'color:#cc0',
+    W:'color:#fff',      p:'color:#a0c',      d:'color:#666',
+    l:'color:#66f',      r:'color:#4f4',      a:'color:#4ff',
+    e:'color:#f66',      x:'font-weight:bold',
+  };
+  const ackColorToHtml = text => {
+    let html = '', depth = 0;
+    for (const part of text.split(/(@@[\s\S])/)) {
+      if (part.length === 3 && part[0] === '@' && part[1] === '@') {
+        const code = part[2];
+        if (code === 'N') { while (depth > 0) { html += '</span>'; depth--; } }
+        else { const s = ACK_COLOR_STYLE[code]; if (s) { html += `<span style="${s}">`; depth++; } }
+      } else { html += escHtml(part); }
+    }
+    while (depth > 0) { html += '</span>'; depth--; }
+    return html;
+  };
+  const ansiToHtml = text => {
+    const chunks = text.split(/(\x1b\[[0-9;]*m)/g);
+    let st = {fg:'',bg:'',bold:false,ul:false};
+    let html = '';
+    const attr = () => {
+      const p = [];
+      if (st.fg) p.push(`color:${st.fg}`);
+      if (st.bg) p.push(`background:${st.bg}`);
+      if (st.bold) p.push('font-weight:700');
+      if (st.ul) p.push('text-decoration:underline');
+      return p.length ? ` style="${p.join(';')}"` : '';
+    };
+    for (const chunk of chunks) {
+      const m = chunk.match(/^\x1b\[([0-9;]*)m$/);
+      if (!m) { if (chunk) html += `<span${attr()}>${escHtml(chunk)}</span>`; continue; }
+      for (const c of (m[1] ? m[1].split(';').map(Number) : [0])) {
+        if (c===0) st={fg:'',bg:'',bold:false,ul:false};
+        else if (c===1)  st.bold=true;
+        else if (c===22) st.bold=false;
+        else if (c===4)  st.ul=true;
+        else if (c===24) st.ul=false;
+        else if (c===39) st.fg='';
+        else if (c===49) st.bg='';
+        else if (ANSI_FG[c])    st.fg=ANSI_FG[c];
+        else if (ANSI_FG[c-10]) st.bg=ANSI_FG[c-10];
+      }
+    }
+    return html;
+  };
+
+  // ── I/O panel ─────────────────────────────────────────────────────────────
+  const appendIO = (text, cssClass) => {
+    const span = document.createElement('span');
+    if (cssClass) span.className = cssClass;
+    span.innerHTML = ansiToHtml(text.replaceAll('\r', ''));
+    ioOutput.appendChild(span);
+    ioOutput.scrollTop = ioOutput.scrollHeight;
+  };
+
+  // ── Send command helper ───────────────────────────────────────────────────
+  const sendCmd = cmd => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(`${cmd}\n`);
+    commandInput.value = '';
+  };
+
+  // ── Room panel ────────────────────────────────────────────────────────────
+  const ACTION_LABEL = {
+    look:'Look', examine:'Examine', attack:'Attack', consider:'Consider',
+    get:'Get', tell:'Tell', group:'Group', drink:'Drink', drop:'Drop',
+  };
+  const DIR_CMD = {
+    north:'n', south:'s', east:'e', west:'w', up:'u', down:'d',
+    northeast:'ne', northwest:'nw', southeast:'se', southwest:'sw',
+  };
+  const DIR_ABBR = {
+    north:'N', south:'S', east:'E', west:'W', up:'U', down:'D',
+    northeast:'NE', northwest:'NW', southeast:'SE', southwest:'SW',
+  };
+
+  const closeAllDropdowns = () =>
+    document.querySelectorAll('.entity-dropdown').forEach(d => d.classList.add('hidden'));
+  document.addEventListener('click', closeAllDropdowns);
+
+  const buildActionCmd = (action, entity) => {
+    const kw = entity.keywords?.[0] ?? entity.keyword ?? entity.name ?? '';
+    return action === 'attack' ? `kill ${kw}` : `${action} ${kw}`;
+  };
+
+  const buildEntityRow = (entity, isPlayer, itemData) => {
+    const row = document.createElement('div');
+    row.className = 'entity-row';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'entity-name';
+    nameEl.innerHTML = itemData ? ackColorToHtml(entity.name ?? entity.keyword ?? '(unknown)')
+                                : escHtml(entity.name ?? entity.keyword ?? '(unknown)');
+
+    if (itemData) {
+      nameEl.style.cursor = 'help';
+      nameEl.addEventListener('mouseenter', e => {
+        appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+        lastAppraiseData = itemData;
+        renderAppraisePopup(itemData, e.clientX, e.clientY);
+      });
+      nameEl.addEventListener('mouseleave', () => {
+        hideAppraisePopup();
+        lastAppraiseData = null;
+      });
+      nameEl.addEventListener('mousemove', e => {
+        appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+        if (lastAppraiseData) renderAppraisePopup(lastAppraiseData, e.clientX, e.clientY);
+      });
+    }
+    row.appendChild(nameEl);
+
+    if (entity.actions?.length) {
+      const menuBtn = document.createElement('button');
+      menuBtn.type = 'button';
+      menuBtn.className = 'entity-menu-btn';
+      menuBtn.textContent = '▼';
+      row.appendChild(menuBtn);
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'entity-dropdown hidden';
+
+      for (const action of entity.actions) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dropdown-item';
+        btn.textContent = ACTION_LABEL[action] ?? (action[0].toUpperCase() + action.slice(1));
+
+        if (action === 'tell' && isPlayer) {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            closeAllDropdowns();
+            commandInput.value = `tell ${entity.name} `;
+            commandInput.focus();
+          });
+        } else {
+          const cmd = buildActionCmd(action, entity);
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            closeAllDropdowns();
+            sendCmd(cmd);
+          });
+        }
+        dropdown.appendChild(btn);
+      }
+
+      menuBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const wasHidden = dropdown.classList.contains('hidden');
+        closeAllDropdowns();
+        dropdown.classList.toggle('hidden', !wasHidden);
+      });
+      row.appendChild(dropdown);
+    }
+    return row;
+  };
+
+  const renderRoom = () => {
+    roomContent.innerHTML = '';
+    if (!roomState.name) return;
+
+    // Room name
+    const nameEl = document.createElement('div');
+    nameEl.className = 'room-name';
+    nameEl.textContent = roomState.name;
+    roomContent.appendChild(nameEl);
+
+    // Description
+    const descEl = document.createElement('div');
+    descEl.className = 'room-desc';
+    descEl.innerHTML = ansiToHtml(roomState.description);
+    roomContent.appendChild(descEl);
+
+    // Exit chips
+    if (roomState.exits.length) {
+      const exitsEl = document.createElement('div');
+      exitsEl.className = 'room-exits';
+      for (const dir of roomState.exits) {
+        const chip = document.createElement('span');
+        chip.className = 'exit-chip';
+        chip.textContent = DIR_ABBR[dir] ?? dir.toUpperCase();
+        chip.title = dir;
+        chip.addEventListener('click', () => sendCmd(DIR_CMD[dir] ?? dir));
+        exitsEl.appendChild(chip);
+      }
+      roomContent.appendChild(exitsEl);
+    }
+
+    const addSection = (title, items, isPlayer, withItemData) => {
+      if (!items.length) return;
+      const titleEl = document.createElement('div');
+      titleEl.className = 'room-section-title';
+      titleEl.textContent = title;
+      roomContent.appendChild(titleEl);
+      for (const item of items) {
+        const itemData = withItemData ? (item.type ? item : null) : null;
+        roomContent.appendChild(buildEntityRow(item, isPlayer, itemData));
+      }
+    };
+
+    addSection('Mobs',    Array.from(roomState.mobs.values()),    false, false);
+    addSection('Players', Array.from(roomState.players.values()), true,  false);
+    addSection('Objects', Array.from(roomState.objects.values()), false, true);
+    addSection('Extras',  roomState.extras,                       false, false);
+  };
+
+  const setRoomPlaceholder = text => {
+    roomContent.innerHTML = `<div class="panel-placeholder">${escHtml(text)}</div>`;
+    // Clear live state so stale data is not rendered after reconnect
+    roomState.name = ''; roomState.description = ''; roomState.exits = [];
+    roomState.mobs.clear(); roomState.players.clear(); roomState.objects.clear();
+    roomState.extras = [];
+  };
+
+  // ── Map panel ─────────────────────────────────────────────────────────────
+  const loadTerrainImage = terrain => {
+    if (mapState.tileImages.has(terrain)) return;
+    mapState.tileImages.set(terrain, 'loading');
+    const img = new Image();
+    img.onload  = () => { mapState.tileImages.set(terrain, img); scheduleMapDraw(); };
+    img.onerror = () => { mapState.tileImages.set(terrain, null); };
+    img.src = `/img/terrain/${terrain}.png`;
+  };
+
+  const scheduleMapDraw = () => {
+    if (mapState.animFrame) return;
+    mapState.animFrame = requestAnimationFrame(() => { mapState.animFrame = null; drawMap(); });
+  };
+
+  const resizeMapCanvas = () => {
+    const headerH = mapWindow.querySelector('.float-header')?.offsetHeight ?? 0;
+    const w = Math.max(1, Math.floor(mapWindow.clientWidth));
+    const h = Math.max(1, Math.floor(mapWindow.clientHeight - headerH));
+    if (mapCanvas.width !== w || mapCanvas.height !== h) {
+      mapCanvas.width  = w;
+      mapCanvas.height = h;
+      scheduleMapDraw();
+    }
+  };
+
+  const setMapPlaceholder = text => {
+    mapCanvas.style.display = 'none';
+    mapPlaceholder.style.display = 'flex';
+    mapPlaceholder.textContent = text;
+    // Clear live state
+    mapState.rooms.clear();
+    mapState.currentId  = null;
+    mapState.hasScouted = false;
+  };
+
+  const showMapCanvas = () => {
+    mapPlaceholder.style.display = 'none';
+    mapCanvas.style.display = 'block';
+    resizeMapCanvas();
+  };
+
+  const drawMap = () => {
+    const ctx = mapCanvas.getContext('2d');
+    const W = mapCanvas.width, H = mapCanvas.height;
+    if (!W || !H) return;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#07090f';
+    ctx.fillRect(0, 0, W, H);
+
+    if (!mapState.currentId || !mapState.rooms.size) return;
+
+    const radius   = mapState.hasScouted ? 3 : 2;
+    const gridSize = radius * 2 + 1;
+    const tileSize = Math.max(14, Math.min(Math.floor(W / gridSize), Math.floor(H / gridSize)));
+    const ox = Math.floor((W - gridSize * tileSize) / 2);
+    const oy = Math.floor((H - gridSize * tileSize) / 2);
+
+    // Draw exit connectors beneath tiles
+    ctx.lineWidth = 1;
+    for (const room of mapState.rooms.values()) {
+      const {rel_x: rx, rel_y: ry} = room;
+      if (Math.abs(rx) > radius || Math.abs(ry) > radius) continue;
+      const cx = ox + (rx + radius) * tileSize + tileSize / 2;
+      const cy = oy + (ry + radius) * tileSize + tileSize / 2;
+      for (const targetId of Object.values(room.exits ?? {})) {
+        const t = mapState.rooms.get(targetId);
+        if (!t || Math.abs(t.rel_x) > radius || Math.abs(t.rel_y) > radius) continue;
+        const tx = ox + (t.rel_x + radius) * tileSize + tileSize / 2;
+        const ty = oy + (t.rel_y + radius) * tileSize + tileSize / 2;
+        const isScoutEdge = mapState.hasScouted &&
+          (Math.abs(rx) === radius || Math.abs(ry) === radius ||
+           Math.abs(t.rel_x) === radius || Math.abs(t.rel_y) === radius);
+        ctx.globalAlpha = isScoutEdge ? 0.2 : 0.3;
+        ctx.strokeStyle = '#b4c8ff';
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1.0;
+
+    // Draw tiles
+    for (const room of mapState.rooms.values()) {
+      const {rel_x: rx, rel_y: ry} = room;
+      if (Math.abs(rx) > radius || Math.abs(ry) > radius) continue;
+
+      const isCurrent   = room.id === mapState.currentId;
+      const isScoutEdge = mapState.hasScouted && (Math.abs(rx) === radius || Math.abs(ry) === radius);
+      const px = ox + (rx + radius) * tileSize;
+      const py = oy + (ry + radius) * tileSize;
+      const pad = 2, ts = tileSize - pad * 2;
+
+      ctx.globalAlpha = isScoutEdge ? 0.4 : 1.0;
+
+      const img = mapState.tileImages.get(room.terrain);
+      if (img && img !== 'loading' && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, px + pad, py + pad, ts, ts);
+      } else {
+        ctx.fillStyle = TERRAIN_COLOR[room.terrain] ?? '#2a2a3a';
+        ctx.fillRect(px + pad, py + pad, ts, ts);
+        if (tileSize >= 28) {
+          ctx.globalAlpha = isScoutEdge ? 0.25 : 0.5;
+          ctx.fillStyle = '#fff';
+          ctx.font = `bold ${Math.max(6, Math.floor(tileSize * 0.22))}px monospace`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(TERRAIN_LABEL[room.terrain] ?? '??', px + tileSize / 2, py + tileSize / 2);
+        }
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Current-room highlight ring + player dot
+      if (isCurrent) {
+        ctx.strokeStyle = '#5b9cf6';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + pad, py + pad, ts, ts);
+        ctx.fillStyle = '#5b9cf6';
+        ctx.beginPath();
+        ctx.arc(px + tileSize / 2, py + tileSize / 2, Math.max(3, tileSize * 0.14), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Mob-count badge on adjacent rooms
+      const mobCount = room.mob_count ?? 0;
+      if (!isCurrent && mobCount > 0) {
+        const br  = Math.max(5, Math.floor(tileSize * 0.18));
+        const bx  = px + tileSize - pad - br;
+        const by  = py + pad + br;
+        ctx.fillStyle = mobCount >= 5 ? '#ff5f56' : '#ffbd2e';
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#07090f';
+        ctx.font = `bold ${Math.max(6, Math.floor(br * 1.3))}px monospace`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(mobCount > 9 ? '9+' : String(mobCount), bx, by);
+      }
+    }
+  };
+
+  // ── Message routing ───────────────────────────────────────────────────────
+  const routeRoom = msg => {
+    switch (msg.tag) {
+      case 'Room':
+        roomState.name        = msg.data.name ?? '';
+        roomState.description = msg.data.description ?? '';
+        roomState.exits       = msg.data.exits ?? [];
+        roomState.mobs.clear();   for (const e of msg.data.mobs    ?? []) roomState.mobs.set(e.id, e);
+        roomState.players.clear();for (const e of msg.data.players ?? []) roomState.players.set(e.name, e);
+        roomState.objects.clear();for (const e of msg.data.objects ?? []) roomState.objects.set(e.id, e);
+        roomState.extras = msg.data.extras ?? [];
+        renderRoom();
+        break;
+
+      case 'Room:Enter':
+      case 'Room:ObjectAppear': {
+        const d = msg.data;
+        if      (d.entity_type === 'mob')    roomState.mobs.set(d.id, d);
+        else if (d.entity_type === 'player') roomState.players.set(d.name, d);
+        else if (d.entity_type === 'object') roomState.objects.set(d.id, d);
+        renderRoom();
+        break;
+      }
+
+      case 'Room:Leave':
+      case 'Room:ObjectVanish': {
+        const d = msg.data;
+        if      (d.entity_type === 'mob')    roomState.mobs.delete(d.id);
+        else if (d.entity_type === 'player') roomState.players.delete(d.name);
+        else if (d.entity_type === 'object') roomState.objects.delete(d.id);
+        renderRoom();
+        break;
+      }
+    }
+  };
+
+  // ── Equipment panel ───────────────────────────────────────────────────────
+  const hideAppraisePopup = () => { appraisePopup.style.display = 'none'; };
+
+  const renderAppraisePopup = (data, mouseX, mouseY) => {
+    if (!data) { hideAppraisePopup(); return; }
+    let html = `<div class="appraise-name">${ackColorToHtml(data.short_descr || data.name || '')}</div>`;
+    html += `<div class="appraise-type">${escHtml(data.type)}`;
+    if (data.item_class) html += ` \u00b7 ${escHtml(data.item_class)}`;
+    html += '</div>';
+    if (data.armor_class !== undefined) html += `<div>AC: ${data.armor_class}</div>`;
+    if (data.damage_min !== undefined)
+      html += `<div>Dmg: ${data.damage_min}\u2013${data.damage_max} (avg ${data.damage_avg})</div>`;
+    if (data.affects && data.affects.length)
+      for (const a of data.affects)
+        html += `<div>${escHtml(a.stat)}: ${a.modifier > 0 ? '+' : ''}${a.modifier}</div>`;
+    html += `<div class="appraise-meta">Lvl ${data.level} \u00b7 Wt ${data.weight} \u00b7 Cost ${data.cost}</div>`;
+    appraisePopup.innerHTML = html;
+    appraisePopup.style.left = `${mouseX + 14}px`;
+    appraisePopup.style.top  = `${mouseY + 14}px`;
+    appraisePopup.style.display = 'block';
+  };
+
+  // Last appraise mouse position (updated on mousemove over item rows)
+  let appraiseMouseX = 0, appraiseMouseY = 0;
+  let lastAppraiseData = null;
+
+  const renderEquipmentPanel = data => {
+    equipContent.innerHTML = '';
+    hideAppraisePopup();
+    lastAppraiseData = null;
+    if (!data || !data.slots) return;
+    const table = document.createElement('table');
+    table.className = 'equip-table';
+    for (const slot of data.slots) {
+      const tr = document.createElement('tr');
+      const slotTd = document.createElement('td');
+      slotTd.className = 'equip-slot-name';
+      slotTd.textContent = slot.slot_name;
+      const itemTd = document.createElement('td');
+      if (slot.item) {
+        itemTd.className = 'equip-item-name';
+        itemTd.innerHTML = ackColorToHtml(slot.item.short_descr);
+        itemTd.addEventListener('mouseenter', e => {
+          appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+          lastAppraiseData = slot.item;
+          renderAppraisePopup(slot.item, e.clientX, e.clientY);
+        });
+        itemTd.addEventListener('mouseleave', () => {
+          hideAppraisePopup();
+          lastAppraiseData = null;
+        });
+        itemTd.addEventListener('mousemove', e => {
+          appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+          if (lastAppraiseData) renderAppraisePopup(lastAppraiseData, e.clientX, e.clientY);
+        });
+      } else {
+        itemTd.className = 'equip-item-name equip-empty';
+        itemTd.textContent = 'Nothing';
+      }
+      tr.appendChild(slotTd);
+      tr.appendChild(itemTd);
+      table.appendChild(tr);
+    }
+    equipContent.appendChild(table);
+  };
+
+  // ── Inventory panel ───────────────────────────────────────────────────────
+  const renderInventoryPanel = data => {
+    invContent.innerHTML = '';
+    hideAppraisePopup();
+    lastAppraiseData = null;
+    if (!data || !data.items || !data.items.length) {
+      invContent.innerHTML = '<div class="panel-placeholder">Inventory is empty.</div>';
+      return;
+    }
+    for (const item of data.items) {
+      const entity = { ...item, name: item.short_descr ?? item.keyword };
+      invContent.appendChild(buildEntityRow(entity, false, item));
+    }
+  };
+
+  // ── Character sheet panel ─────────────────────────────────────────────────
+  const renderScorePanel = data => {
+    charContent.innerHTML = '';
+    if (!data) return;
+    const div = document.createElement('div');
+    div.className = 'char-sheet';
+
+    const header = document.createElement('div');
+    header.className = 'char-header';
+    header.textContent = `${data.name}${data.title || ''} (${data.race})`;
+    div.appendChild(header);
+
+    const mkBar = (label, cur, max, cls) => {
+      const pct = max > 0 ? Math.round(cur / max * 100) : 0;
+      const w = document.createElement('div');
+      w.className = 'char-bar-wrap';
+      w.innerHTML = `<span class="char-bar-label">${label}</span>` +
+        `<div class="char-bar"><div class="char-bar-fill ${cls}" style="width:${pct}%"></div></div>` +
+        `<span class="char-bar-val">${cur}/${max}</span>`;
+      return w;
+    };
+    div.appendChild(mkBar('HP', data.hit,  data.hit_max,  'bar-hp'));
+    div.appendChild(mkBar('MP', data.mana, data.mana_max, 'bar-mp'));
+    div.appendChild(mkBar('MV', data.move, data.move_max, 'bar-mv'));
+
+    const statsDiv = document.createElement('div');
+    statsDiv.className = 'char-stats';
+    for (const [n, cur, max] of [
+      ['STR', data.str, data.str_max], ['INT', data.int, data.int_max],
+      ['WIS', data.wis, data.wis_max], ['DEX', data.dex, data.dex_max],
+      ['CON', data.con, data.con_max],
+    ]) {
+      const s = document.createElement('span');
+      s.className = 'char-stat';
+      s.textContent = `${n}:${cur}/${max}`;
+      statsDiv.appendChild(s);
+    }
+    div.appendChild(statsDiv);
+
+    if (data.classes && data.classes.length) {
+      const cd = document.createElement('div');
+      cd.className = 'char-classes';
+      cd.textContent = data.classes.map(c => `${c.name}:${c.level}`).join(' ');
+      div.appendChild(cd);
+    }
+
+    const ge = document.createElement('div');
+    ge.className = 'char-gold-exp';
+    ge.textContent = `Gold:${data.gold}  Exp:${data.exp}  QP:${data.quest_points}`;
+    div.appendChild(ge);
+
+    const pos = document.createElement('div');
+    pos.className = 'char-position';
+    pos.textContent = `${data.position} \u00b7 ${data.stance}`;
+    div.appendChild(pos);
+
+    const mkRow = (label, value) => {
+      const row = document.createElement('div');
+      row.className = 'char-row';
+      row.innerHTML = `<span class="char-row-label">${escHtml(label)}</span><span class="char-row-val">${escHtml(String(value))}</span>`;
+      return row;
+    };
+
+    if (data.ac !== undefined || data.hitroll !== undefined || data.damroll !== undefined) {
+      const parts = [];
+      if (data.hitroll !== undefined) parts.push(`HR:${data.hitroll >= 0 ? '+' : ''}${data.hitroll}`);
+      if (data.damroll !== undefined) parts.push(`DR:${data.damroll >= 0 ? '+' : ''}${data.damroll}`);
+      if (data.ac      !== undefined) parts.push(`AC:${data.ac}`);
+      div.appendChild(mkRow('Combat', parts.join('  ')));
+    }
+
+    if (data.saves_spell !== undefined || data.saves_breath !== undefined || data.saves_rod !== undefined) {
+      const parts = [];
+      if (data.saves_spell   !== undefined) parts.push(`Spell:${data.saves_spell}`);
+      if (data.saves_breath  !== undefined) parts.push(`Breath:${data.saves_breath}`);
+      if (data.saves_rod     !== undefined) parts.push(`Rod:${data.saves_rod}`);
+      div.appendChild(mkRow('Saves', parts.join('  ')));
+    }
+
+    if (data.alignment_label !== undefined || data.alignment !== undefined) {
+      const label = data.alignment_label
+        ? `${data.alignment_label}${data.alignment !== undefined ? ` (${data.alignment})` : ''}`
+        : String(data.alignment);
+      div.appendChild(mkRow('Alignment', label));
+    }
+
+    if (data.age !== undefined) div.appendChild(mkRow('Age', `${data.age} years`));
+
+    if (data.kills !== undefined || data.deaths !== undefined || data.pkills !== undefined || data.pdeaths !== undefined) {
+      const parts = [];
+      if (data.kills   !== undefined) parts.push(`Kills:${data.kills}`);
+      if (data.deaths  !== undefined) parts.push(`Deaths:${data.deaths}`);
+      if (data.pkills  !== undefined) parts.push(`PK:${data.pkills}`);
+      if (data.pdeaths !== undefined) parts.push(`PKD:${data.pdeaths}`);
+      div.appendChild(mkRow('KD', parts.join('  ')));
+    }
+
+    if (data.bank_gold !== undefined) div.appendChild(mkRow('Bank', `${data.bank_gold.toLocaleString()} gold`));
+
+    charContent.appendChild(div);
+  };
+
+  const routeMap = msg => {
+    switch (msg.tag) {
+      case 'Map':
+        showV2Windows();
+        mapState.rooms.clear();
+        mapState.currentId  = msg.data.current_room_id ?? null;
+        mapState.hasScouted = false;
+        for (const r of msg.data.rooms ?? []) {
+          mapState.rooms.set(r.id, r);
+          loadTerrainImage(r.terrain ?? 'inside');
+        }
+        showMapCanvas();
+        scheduleMapDraw();
+        break;
+
+      case 'Map:Scan':
+        // data: { north:{room_id,count}, south:{...}, east:{...}, west:{...} }
+        // Reset all mob counts first so only scanned rooms show badges.
+        for (const r of mapState.rooms.values()) r.mob_count = 0;
+        for (const info of Object.values(msg.data)) {
+          if (!info) continue;
+          const r = mapState.rooms.get(info.room_id);
+          if (r) r.mob_count = info.count;
+        }
+        scheduleMapDraw();
+        break;
+
+      case 'Map:Scout':
+        mapState.hasScouted = true;
+        // Reset all mob counts first so only scouted cardinal rooms show badges.
+        for (const r of mapState.rooms.values()) r.mob_count = 0;
+        for (const r of msg.data.rooms ?? []) {
+          mapState.rooms.set(r.id, { ...mapState.rooms.get(r.id), ...r });
+          loadTerrainImage(r.terrain ?? 'inside');
+        }
+        scheduleMapDraw();
+        break;
+    }
+  };
+
+  const handleMessage = event => {
+    if (typeof event.data !== 'string') { appendIO('[Binary message received]\n'); return; }
+
+    let msg = null;
+    if (event.data.trimStart().startsWith('{')) {
+      try { msg = JSON.parse(event.data); } catch (_) {}
+    }
+
+    // v1 / legacy path
+    if (!msg || msg.v !== 2) {
+      if (msg?.type === 'music') { handleMusicCommand(msg); return; }
+      if (protocolMode !== 'v1') {
+        protocolMode = 'v1';
+        hideV2Windows();
+      }
+      appendIO(event.data);
+      return;
+    }
+
+    // v2 tagged path
+    protocolMode = 'v2';
+    const category = msg.tag?.split(':')[0] ?? '';
+
+    if (category === 'Room')      { routeRoom(msg); return; }
+    if (category === 'Map')       { routeMap(msg);  return; }
+    if (category === 'Music')     { if (msg.data) handleMusicCommand(msg.data); return; }
+    if (msg.tag === 'Equipment')  { renderEquipmentPanel(msg.data); return; }
+    if (msg.tag === 'Inventory' && msg.data && typeof msg.data === 'object') { renderInventoryPanel(msg.data); return; }
+    if (msg.tag === 'Score')      { renderScorePanel(msg.data);     return; }
+    if (msg.tag === 'Appraise')   {
+      renderAppraisePopup(msg.data, appraiseMouseX, appraiseMouseY);
+      lastAppraiseData = msg.data;
+      return;
+    }
+
+    // All other tags go to the I/O panel
+    const text = typeof msg.data === 'string' ? msg.data : JSON.stringify(msg.data);
+    const cssClass = category === 'System' ? 'io-system'
+                   : msg.tag === 'Communication:Tell' ? 'io-tell'
+                   : '';
+    appendIO(text, cssClass || undefined);
+  };
+
+  // ── Floating window management ────────────────────────────────────────────
+  const LS_MAP_POS    = 'ack.win.map.pos';
+  const LS_MAP_SIZE   = 'ack.win.map.size';
+  const LS_ROOM_POS   = 'ack.win.room.pos';
+  const LS_ROOM_SIZE  = 'ack.win.room.size';
+  const LS_EQUIP_POS  = 'ack.win.equip.pos';
+  const LS_EQUIP_SIZE = 'ack.win.equip.size';
+  const LS_INV_POS    = 'ack.win.inv.pos';
+  const LS_INV_SIZE   = 'ack.win.inv.size';
+  const LS_CHAR_POS   = 'ack.win.char.pos';
+  const LS_CHAR_SIZE  = 'ack.win.char.size';
+
+  const showV2Windows = () => {
+    if (!mapWinClosed)   { mapWindow.style.display   = 'flex'; resizeMapCanvas(); }
+    if (!roomWinClosed)  { roomWindow.style.display  = 'flex'; }
+    if (!equipWinClosed) { equipWindow.style.display = 'flex'; }
+    if (!invWinClosed)   { invWindow.style.display   = 'flex'; }
+    if (!charWinClosed)  { charWindow.style.display  = 'flex'; }
+    toggleMapBtn.style.display   = '';
+    toggleRoomBtn.style.display  = '';
+    toggleEquipBtn.style.display = '';
+    toggleInvBtn.style.display   = '';
+    toggleCharBtn.style.display  = '';
+  };
+
+  const hideV2Windows = () => {
+    mapWindow.style.display      = 'none';
+    roomWindow.style.display     = 'none';
+    equipWindow.style.display    = 'none';
+    invWindow.style.display      = 'none';
+    charWindow.style.display     = 'none';
+    toggleMapBtn.style.display   = 'none';
+    toggleRoomBtn.style.display  = 'none';
+    toggleEquipBtn.style.display = 'none';
+    toggleInvBtn.style.display   = 'none';
+    toggleCharBtn.style.display  = 'none';
+    hideAppraisePopup();
+  };
+
+  const loadWindowPositions = () => {
+    const mp = JSON.parse(localStorage.getItem(LS_MAP_POS)   ?? 'null');
+    const ms = JSON.parse(localStorage.getItem(LS_MAP_SIZE)  ?? 'null');
+    mapWindow.style.left   = mp ? `${mp.x}px` : '20px';
+    mapWindow.style.top    = mp ? `${mp.y}px` : '80px';
+    mapWindow.style.width  = ms ? `${ms.w}px` : '280px';
+    mapWindow.style.height = ms ? `${ms.h}px` : '280px';
+
+    const rp = JSON.parse(localStorage.getItem(LS_ROOM_POS)  ?? 'null');
+    const rs = JSON.parse(localStorage.getItem(LS_ROOM_SIZE) ?? 'null');
+    roomWindow.style.left   = rp ? `${rp.x}px` : `${Math.max(20, window.innerWidth - 280)}px`;
+    roomWindow.style.top    = rp ? `${rp.y}px` : '80px';
+    roomWindow.style.width  = rs ? `${rs.w}px` : '260px';
+    roomWindow.style.height = rs ? `${rs.h}px` : '380px';
+
+    const ep = JSON.parse(localStorage.getItem(LS_EQUIP_POS)  ?? 'null');
+    const es = JSON.parse(localStorage.getItem(LS_EQUIP_SIZE) ?? 'null');
+    equipWindow.style.left   = ep ? `${ep.x}px` : '320px';
+    equipWindow.style.top    = ep ? `${ep.y}px` : '80px';
+    equipWindow.style.width  = es ? `${es.w}px` : '240px';
+    equipWindow.style.height = es ? `${es.h}px` : '380px';
+
+    const ip = JSON.parse(localStorage.getItem(LS_INV_POS)  ?? 'null');
+    const is_ = JSON.parse(localStorage.getItem(LS_INV_SIZE) ?? 'null');
+    invWindow.style.left   = ip  ? `${ip.x}px`  : '575px';
+    invWindow.style.top    = ip  ? `${ip.y}px`  : '80px';
+    invWindow.style.width  = is_ ? `${is_.w}px` : '220px';
+    invWindow.style.height = is_ ? `${is_.h}px` : '320px';
+
+    const cp = JSON.parse(localStorage.getItem(LS_CHAR_POS)  ?? 'null');
+    const cs = JSON.parse(localStorage.getItem(LS_CHAR_SIZE) ?? 'null');
+    charWindow.style.left   = cp ? `${cp.x}px` : '320px';
+    charWindow.style.top    = cp ? `${cp.y}px` : '80px';
+    charWindow.style.width  = cs ? `${cs.w}px` : '260px';
+    charWindow.style.height = cs ? `${cs.h}px` : '420px';
+  };
+
+  const makeDraggable = (winEl, headerEl, lsPosKey) => {
+    let dragging = false, ox = 0, oy = 0;
+    headerEl.addEventListener('mousedown', e => {
+      if (e.target.closest('.float-close')) return;
+      dragging = true;
+      const r = winEl.getBoundingClientRect();
+      ox = e.clientX - r.left; oy = e.clientY - r.top;
+      winEl.style.right = 'auto'; winEl.style.bottom = 'auto';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const x = Math.max(0, Math.min(e.clientX - ox, window.innerWidth  - winEl.offsetWidth));
+      const y = Math.max(0, Math.min(e.clientY - oy, window.innerHeight - winEl.offsetHeight));
+      winEl.style.left = `${x}px`; winEl.style.top = `${y}px`;
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      const r = winEl.getBoundingClientRect();
+      localStorage.setItem(lsPosKey, JSON.stringify({x: Math.round(r.left), y: Math.round(r.top)}));
+    });
+  };
+
+  // Close buttons
+  document.getElementById('map-close-btn').addEventListener('click', () => {
+    mapWindow.style.display = 'none'; mapWinClosed = true;
+  });
+  document.getElementById('room-close-btn').addEventListener('click', () => {
+    roomWindow.style.display = 'none'; roomWinClosed = true;
+  });
+  document.getElementById('equip-close-btn').addEventListener('click', () => {
+    equipWindow.style.display = 'none'; equipWinClosed = true; hideAppraisePopup();
+  });
+  document.getElementById('inv-close-btn').addEventListener('click', () => {
+    invWindow.style.display = 'none'; invWinClosed = true; hideAppraisePopup();
+  });
+  document.getElementById('char-close-btn').addEventListener('click', () => {
+    charWindow.style.display = 'none'; charWinClosed = true;
+  });
+
+  // Toggle buttons
+  toggleMapBtn.addEventListener('click', () => {
+    const hidden = mapWindow.style.display === 'none';
+    mapWindow.style.display = hidden ? 'flex' : 'none';
+    mapWinClosed = !hidden;
+    if (hidden) resizeMapCanvas();
+  });
+  toggleRoomBtn.addEventListener('click', () => {
+    const hidden = roomWindow.style.display === 'none';
+    roomWindow.style.display = hidden ? 'flex' : 'none';
+    roomWinClosed = !hidden;
+  });
+  toggleEquipBtn.addEventListener('click', () => {
+    const hidden = equipWindow.style.display === 'none';
+    equipWindow.style.display = hidden ? 'flex' : 'none';
+    equipWinClosed = !hidden;
+    if (!hidden) hideAppraisePopup();
+  });
+  toggleInvBtn.addEventListener('click', () => {
+    const hidden = invWindow.style.display === 'none';
+    invWindow.style.display = hidden ? 'flex' : 'none';
+    invWinClosed = !hidden;
+    if (!hidden) hideAppraisePopup();
+    if (hidden) sendCmd('inventory');
+  });
+  toggleCharBtn.addEventListener('click', () => {
+    const hidden = charWindow.style.display === 'none';
+    charWindow.style.display = hidden ? 'flex' : 'none';
+    charWinClosed = !hidden;
+  });
+
+  // ── Music controller ──────────────────────────────────────────────────────
+  audio.volume = parseFloat(musicVolume.value);
+  audio.loop   = musicLoop.checked;
+  const FADE_MS = 2000, FADE_TICK = 50;
+
+  musicPlayBtn.addEventListener('click', () => audio.play());
+  musicStopBtn.addEventListener('click', () => {
+    if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+    audio.pause(); audio.currentTime = 0;
+    audioNext.pause(); audioNext.src = '';
+  });
+  musicVolume.addEventListener('input', () => { audio.volume = parseFloat(musicVolume.value); });
+  musicLoop.addEventListener('change',  () => { audio.loop = musicLoop.checked; audioNext.loop = musicLoop.checked; });
+
+  const handleMusicCommand = cmd => {
+    if (cmd.action === 'play' && cmd.url) {
+      musicControls.style.display = 'flex';
+      const vol = parseFloat(musicVolume.value);
+      if (audio.paused || !audio.src) {
+        audio.src = cmd.url; audio.loop = musicLoop.checked; audio.volume = vol;
+        audio.play().catch(() => {});
+        return;
+      }
+      if (audio.src === cmd.url) return;
+      if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+      const out = audio, inc = audioNext;
+      inc.src = cmd.url; inc.loop = musicLoop.checked; inc.volume = 0;
+      inc.play().catch(() => {});
+      const steps = FADE_MS / FADE_TICK; let step = 0;
+      fadeTimer = setInterval(() => {
+        const t = Math.min(++step / steps, 1);
+        out.volume = vol * (1 - t); inc.volume = vol * t;
+        if (t >= 1) {
+          clearInterval(fadeTimer); fadeTimer = null;
+          out.pause(); out.src = inc.src; out.loop = inc.loop;
+          out.volume = vol; out.currentTime = inc.currentTime;
+          out.play().catch(() => {}); inc.pause(); inc.src = '';
+        }
+      }, FADE_TICK);
+    } else if (cmd.action === 'stop') {
+      if (audio.paused || !audio.src) return;
+      if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+      const startVol = audio.volume, vol = parseFloat(musicVolume.value);
+      const steps = FADE_MS / FADE_TICK; let step = 0;
+      fadeTimer = setInterval(() => {
+        const t = Math.min(++step / steps, 1);
+        audio.volume = startVol * (1 - t);
+        if (t >= 1) {
+          clearInterval(fadeTimer); fadeTimer = null;
+          audio.pause(); audio.src = ''; audio.volume = vol;
+        }
+      }, FADE_TICK);
+    }
+  };
+
+  // ── WebSocket connection ──────────────────────────────────────────────────
+  const setStatus = (text, cls) => { mudStatus.textContent = text; mudStatus.className = `mud-status${cls ? ' ' + cls : ''}`; };
+  const selectedWorld = () => worldSelect.options[worldSelect.selectedIndex];
+  const defaultWsUrl  = () => {
+    const w = selectedWorld();
+    if (!w) return '';
+    if (w.dataset.ws) return w.dataset.ws;
+    return `${w.dataset.scheme}://${w.dataset.host}:${w.dataset.port}/`;
+  };
+
+  connectBtn.addEventListener('click', () => {
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      appendIO('\n[Info] Already connected.\n', 'io-system'); return;
+    }
+    const wsUrl = defaultWsUrl();
+    if (!wsUrl) { appendIO('[Error] No WebSocket endpoint configured.\n', 'io-system'); return; }
+
+    protocolMode   = 'unknown';
+    mapWinClosed   = false;
+    roomWinClosed  = false;
+    equipWinClosed = true;
+    invWinClosed   = true;
+    charWinClosed  = true;
+    hideV2Windows();
+    ioOutput.textContent = '';
+    setRoomPlaceholder('Connecting\u2026');
+    setMapPlaceholder('Connecting\u2026');
+    appendIO(`[Connecting] ${wsUrl}\n`, 'io-system');
+    setStatus('Connecting\u2026');
+
+    const isSecure = wsUrl.startsWith('wss://');
+
+    try { socket = new WebSocket(wsUrl); }
+    catch (err) { appendIO(`[Error] ${err.message}\n`, 'io-system'); socket = null; return; }
+
+    socket.addEventListener('open', () => {
+      const secTag = isSecure ? ' [WSS]' : ' [WS]';
+      appendIO(`[Connected] ${selectedWorld().textContent}${secTag}\n`, 'io-system');
+      setStatus('Connected', 'connected');
+      setRoomPlaceholder('Waiting for room data\u2026');
+      commandInput.focus();
+    });
+    socket.addEventListener('message', handleMessage);
+    socket.addEventListener('close', e => {
+      appendIO(`\n[Disconnected] code=${e.code} reason=${e.reason || 'none'}\n`, 'io-system');
+      setStatus('Disconnected');
+      hideV2Windows();
+      socket = null;
+    });
+    socket.addEventListener('error', () => {
+      if (isSecure) {
+        appendIO(
+          '\n[Error] WSS connection failed.\n' +
+          '[Info] Check that the nginx proxy is running and the SSL certificate is valid.\n',
+          'io-system'
+        );
+      } else {
+        appendIO('\n[Error] WebSocket connection failed.\n', 'io-system');
+      }
+      setStatus('Error', 'error');
+    });
+  });
+
+  disconnectBtn.addEventListener('click', () => {
+    if (!socket || (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING)) {
+      appendIO('\n[Info] No active connection.\n', 'io-system'); socket = null; return;
+    }
+    try { socket.close(); } catch (_) {}
+    appendIO('\n[Disconnected by user]\n', 'io-system');
+    setStatus('Disconnected');
+    hideV2Windows();
+  });
+
+  const sendCommand = () => {
+    const cmd = commandInput.value.trim();
+    if (!cmd || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(`${commandInput.value}\n`);
+    commandInput.value = '';
+  };
+  sendBtn.addEventListener('click', sendCommand);
+  commandInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendCommand(); });
+
+  // ── Fullscreen ────────────────────────────────────────────────────────────
+  fullscreenBtn.addEventListener('click', () => {
+    const isFs = container.classList.toggle('mud-fullscreen');
+    document.body.classList.toggle('mud-fullscreen-active', isFs);
+    fullscreenBtn.textContent = isFs ? '\u2715 Exit Fullscreen' : '\u26F6 Fullscreen';
+    if (isFs) { resizeMapCanvas(); ioOutput.scrollTop = ioOutput.scrollHeight; }
+  });
+
+  // ── ResizeObserver: keep map canvas pixel-accurate & persist sizes ────────
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => {
+      resizeMapCanvas();
+      if (mapWindow.offsetWidth && mapWindow.offsetHeight)
+        localStorage.setItem(LS_MAP_SIZE, JSON.stringify({w: mapWindow.offsetWidth, h: mapWindow.offsetHeight}));
+    }).observe(mapWindow);
+    new ResizeObserver(() => {
+      if (roomWindow.offsetWidth && roomWindow.offsetHeight)
+        localStorage.setItem(LS_ROOM_SIZE, JSON.stringify({w: roomWindow.offsetWidth, h: roomWindow.offsetHeight}));
+    }).observe(roomWindow);
+    new ResizeObserver(() => {
+      if (equipWindow.offsetWidth && equipWindow.offsetHeight)
+        localStorage.setItem(LS_EQUIP_SIZE, JSON.stringify({w: equipWindow.offsetWidth, h: equipWindow.offsetHeight}));
+    }).observe(equipWindow);
+    new ResizeObserver(() => {
+      if (invWindow.offsetWidth && invWindow.offsetHeight)
+        localStorage.setItem(LS_INV_SIZE, JSON.stringify({w: invWindow.offsetWidth, h: invWindow.offsetHeight}));
+    }).observe(invWindow);
+    new ResizeObserver(() => {
+      if (charWindow.offsetWidth && charWindow.offsetHeight)
+        localStorage.setItem(LS_CHAR_SIZE, JSON.stringify({w: charWindow.offsetWidth, h: charWindow.offsetHeight}));
+    }).observe(charWindow);
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  hideV2Windows();
+  loadWindowPositions();
+  makeDraggable(mapWindow,   document.getElementById('map-win-header'),   LS_MAP_POS);
+  makeDraggable(roomWindow,  document.getElementById('room-win-header'),  LS_ROOM_POS);
+  makeDraggable(equipWindow, document.getElementById('equip-win-header'), LS_EQUIP_POS);
+  makeDraggable(invWindow,   document.getElementById('inv-win-header'),   LS_INV_POS);
+  makeDraggable(charWindow,  document.getElementById('char-win-header'),  LS_CHAR_POS);
+  setRoomPlaceholder('Connect to a TNG world to view the room.');
+  setMapPlaceholder('Connect to a TNG world to view the map.');
+
+  const showWorld = () => appendIO(`\n[World] ${selectedWorld()?.textContent ?? ''}\n`, 'io-system');
+  worldSelect.addEventListener('change', showWorld);
+  showWorld();
+};

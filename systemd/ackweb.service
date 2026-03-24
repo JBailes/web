@@ -1,0 +1,16 @@
+[Unit]
+Description=AckWeb API server (AHA + WOL dynamic endpoints)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/web
+ExecStart=/root/web/publish/api/AckWeb.Api
+Environment=HOME=/root
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+Environment=ACKTNG_GAME_URL=http://192.168.1.103:8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,128 @@
+@page "/acktng/reference"
+@page "/acktng/reference/{Tab}"
+@page "/acktng/reference/{Tab}/{Topic}"
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Reference &mdash; ACKmud Historical Archive</PageTitle>
+
+<nav class="sub-nav">
+    <a href="/acktng/reference/help" class="@ActiveClass("help")">Help</a>
+    <a href="/acktng/reference/shelp" class="@ActiveClass("shelp")">Spell Help</a>
+    <a href="/acktng/reference/lore" class="@ActiveClass("lore")">Lore</a>
+</nav>
+
+@if (!string.IsNullOrEmpty(Topic))
+{
+    @if (_topicLoading)
+    {
+        <p class="muted">Loading&hellip;</p>
+    }
+    else if (_topicContent != null)
+    {
+        <h1>@(TabLabel): @Topic</h1>
+        <p><a href="/acktng/reference/@Tab">Back to @TabLabel index</a></p>
+        <pre>@_topicContent</pre>
+    }
+    else
+    {
+        <p class="muted">Topic not found.</p>
+    }
+}
+else
+{
+    <section class="help-forms">
+        <form @onsubmit="Search">
+            <label>@TabLabel:</label>
+            <input @bind="_query" @bind:event="oninput" placeholder="topic" />
+            <button type="submit">Search</button>
+        </form>
+    </section>
+
+    <h1>@TabLabel Topics</h1>
+
+    @if (_indexLoading)
+    {
+        <p class="muted">Loading&hellip;</p>
+    }
+    else if (_topics.Count == 0)
+    {
+        <p>@(string.IsNullOrEmpty(_query) ? "No topics available." : $"No topics match \"{_query}\".")</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_query))
+        {
+            <p>Filtered by <strong>@_query</strong>.</p>
+        }
+        <ul>
+            @foreach (var t in _topics)
+            {
+                <li><a href="/acktng/reference/@Tab/@t">@t</a></li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    [Parameter] public string? Tab { get; set; }
+    [Parameter] public string? Topic { get; set; }
+
+    private string _query = "";
+    private List<string> _topics = new();
+    private bool _indexLoading = true;
+    private string? _topicContent;
+    private bool _topicLoading;
+
+    private string ActiveTab => string.IsNullOrEmpty(Tab) ? "help" : Tab.ToLower();
+    private string TabLabel => ActiveTab switch { "shelp" => "Spell Help", "lore" => "Lore", _ => "Help" };
+    private string ActiveClass(string t) => t == ActiveTab ? "active" : "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(Topic))
+        {
+            await LoadTopic();
+        }
+        else
+        {
+            await LoadIndex();
+        }
+    }
+
+    private async Task LoadIndex()
+    {
+        _indexLoading = true;
+        _topics.Clear();
+        try
+        {
+            var url = string.IsNullOrEmpty(_query)
+                ? $"/api/reference/{ActiveTab}"
+                : $"/api/reference/{ActiveTab}?q={Uri.EscapeDataString(_query)}";
+            var result = await Http.GetFromJsonAsync<List<string>>(url);
+            _topics = result ?? new();
+        }
+        catch { }
+        finally { _indexLoading = false; }
+    }
+
+    private async Task LoadTopic()
+    {
+        _topicLoading = true;
+        _topicContent = null;
+        try
+        {
+            var response = await Http.GetAsync($"/api/reference/{ActiveTab}/{Uri.EscapeDataString(Topic!)}");
+            if (response.IsSuccessStatusCode)
+                _topicContent = await response.Content.ReadAsStringAsync();
+        }
+        catch { }
+        finally { _topicLoading = false; }
+    }
+
+    private async Task Search()
+    {
+        Nav.NavigateTo($"/acktng/reference/{ActiveTab}");
+        await LoadIndex();
+    }
+}
