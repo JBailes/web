@@ -37,7 +37,7 @@ compatibility with non-TNG worlds, but all TNG output must use v2.
 ### 1.2 Tag Taxonomy
 
 Tags follow the pattern `Category` or `Category:Subcategory`. The colon is a
-**hard separator** — routing rules match on the full tag or on the category prefix.
+**hard separator**: routing rules match on the full tag or on the category prefix.
 
 #### Top-level categories
 
@@ -64,7 +64,7 @@ Tags follow the pattern `Category` or `Category:Subcategory`. The colon is a
 | `Map:Scout` | Extended visibility data available because player has `scout` | Map panel |
 | `Inventory` | Player inventory listing | Main I/O |
 | `Score` | Score / stats screen | Main I/O |
-| `Music` | Background music control (existing v1 compat — keep `type:"music"` inside `data`) | — (no display) |
+| `Music` | Background music control (existing v1 compat, keep `type:"music"` inside `data`) | (no display) |
 | `Help` | Help/shelp/lore page content | Main I/O |
 | `Prompt` | The MUD prompt line (hp/mana/move) | Main I/O (prompt bar) |
 
@@ -105,7 +105,7 @@ Sent once after entering a room or issuing `look` with no arguments.
 
 #### `Room:Enter` / `Room:Leave`
 
-Delta events — the room panel applies these without a full redraw.
+Delta events: the room panel applies these without a full redraw.
 
 ```json
 {
@@ -186,7 +186,7 @@ the named room object in `mapState.rooms` and schedules a canvas redraw.
 #### `Map:Scout`
 
 Extends the map payload with additional rooms visible only to a player with `scout`.
-The client merges this into the existing map state — it does not replace it.
+The client merges this into the existing map state; it does not replace it.
 
 ```json
 {
@@ -240,7 +240,7 @@ The three panels are resizable (drag dividers). Sizes are persisted to `localSto
 
 **Window state: live-data.** The map panel holds no history. A `Map` message
 completely replaces all grid state. `Map:Scan` and `Map:Scout` update the current
-state in-place. There is no concept of a "previous map" — the canvas always reflects
+state in-place. There is no concept of a "previous map"; the canvas always reflects
 only the current room's surroundings.
 
 #### 2.1.1 Rendering
@@ -256,9 +256,9 @@ only the current room's surroundings.
   has a small player dot drawn at its centre.
 - The canvas is resized to match the panel's pixel dimensions via `ResizeObserver`,
   with a pixel-accurate redraw scheduled via `requestAnimationFrame` (coalesced).
-- The map is never populated from `look` output — it uses only `Map`/`Map:Scout` data.
+- The map is never populated from `look` output; it uses only `Map`/`Map:Scout` data.
 
-#### 2.1.2 Visibility radius — without `scout`
+#### 2.1.2 Visibility radius (without `scout`)
 
 | Direction | Rooms visible |
 |-----------|--------------|
@@ -271,7 +271,7 @@ Each visible adjacent room displays a **mob count badge** derived from `Map:Scan
 (what `scan` would report for that direction). The badge is shown in the corner of the
 tile; `0` mobs → badge hidden.
 
-#### 2.1.3 Visibility radius — with `scout`
+#### 2.1.3 Visibility radius (with `scout`)
 
 | Direction | Rooms visible |
 |-----------|--------------|
@@ -402,7 +402,7 @@ actions they are rendered in the dropdown.
 Each exit direction is rendered as a small chip/pill button labelled with its
 abbreviation (`N`, `S`, `E`, `W`, `U`, `D`, `NE`, etc.). Clicking sends the direction
 abbreviation as a MUD command (`n`, `s`, `e`, `w`, `u`, `d`, `ne`, etc.). Exits are
-derived from the `Room.exits` array — they are not parsed from look text.
+derived from the `Room.exits` array; they are not parsed from look text.
 
 ---
 
@@ -411,7 +411,7 @@ derived from the `Room.exits` array — they are not parsed from look text.
 **Accepts tags:** Everything **except** `Room*` and `Map*` (those go to their
 dedicated panels). Also accepts unrecognised tags as a fallback.
 
-- Standard scrollback history — all output is appended, never replaced.
+- Standard scrollback history: all output is appended, never replaced.
 - ANSI escape codes are rendered as coloured spans (existing behaviour).
 - The command input bar lives at the bottom of this panel.
 - `System` tagged messages are displayed with a distinct muted style (e.g. grey
@@ -472,7 +472,7 @@ routeMap(msg):
       set hasScouted=true, merge additional rooms, schedule canvas redraw
 ```
 
-The canvas is redrawn via `requestAnimationFrame` (coalesced — only one frame is
+The canvas is redrawn via `requestAnimationFrame` (coalesced: only one frame is
 queued at a time regardless of how many map messages arrive per tick).
 
 ### 3.1 I/O panel styling by tag
@@ -481,7 +481,7 @@ queued at a time regardless of how many map messages arrive per tick).
 |-----|------------------|---------------|
 | `System` | `io-system` | Muted grey italic |
 | `Communication:Tell` | `io-tell` | Bright cyan (`#a5f3fc`) |
-| All other tags | — | Default monospace colour |
+| All other tags | - | Default monospace colour |
 
 ---
 
@@ -507,7 +507,7 @@ The following summarises what the TNG server must do to support this specificati
    extending coverage to 3 steps in each cardinal direction.
 7. **Include `actions` arrays** on all entities in `Room` messages. The server knows
    which actions are legal for each entity type and the current player's class/level.
-8. **Never send look output as plain `Communication` or `System` text** — look output
+8. **Never send look output as plain `Communication` or `System` text**: look output
    must only appear in `Room`-tagged messages so it is correctly isolated to the room
    panel.
 
@@ -540,7 +540,7 @@ Tile filenames match the terrain strings in §2.1.4 exactly
 
 - Worlds that do not send v2 JSON (legacy Telnet-only or v1 WebSocket worlds) continue
   to work as before: all output is routed to the Main I/O panel only, the Room and Map
-  panels display a placeholder message ("No room data — legacy connection").
+  panels display a placeholder message ("No room data, legacy connection").
 - The client detects the protocol version from the first valid JSON message received
   with `v: 2`. Until that message arrives, the client operates in v1 mode.
 - The `v` field is reserved for future breaking changes. Minor, backwards-compatible

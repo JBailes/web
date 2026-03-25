@@ -80,7 +80,7 @@ ln -sf /etc/nginx/sites-available/ackmud.conf \
 rm -f /etc/nginx/sites-enabled/ackmud-bootstrap.conf \
       /etc/nginx/sites-available/ackmud-bootstrap.conf
 
-# Remove acktng's legacy WSS proxy config if it exists — this file supersedes it.
+# Remove acktng's legacy WSS proxy config if it exists (this file supersedes it).
 if [[ -f /etc/nginx/conf.d/ackmud-wss.conf ]]; then
     echo "Removing legacy acktng WSS config (/etc/nginx/conf.d/ackmud-wss.conf)."
     rm -f /etc/nginx/conf.d/ackmud-wss.conf

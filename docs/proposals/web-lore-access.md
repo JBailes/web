@@ -16,7 +16,7 @@ The web server has an explicit design constraint: **zero external Python depende
 
 ## Options Considered
 
-### Option A — Keep Flat Files via Periodic Export
+### Option A: Keep Flat Files via Periodic Export
 
 The DB migration proposal already includes `db_to_files.c` for regenerating flat files from PostgreSQL. A cron job (or post-write trigger) could export help/shelp/lore directories on a schedule.
 
@@ -33,7 +33,7 @@ The DB migration proposal already includes `db_to_files.c` for regenerating flat
 
 ---
 
-### Option B — Direct PostgreSQL via Raw Socket (Wire Protocol)
+### Option B: Direct PostgreSQL via Raw Socket (Wire Protocol)
 
 Python's standard library `socket` module can speak the PostgreSQL frontend/backend wire protocol without any third-party packages. This is theoretically possible but complex.
 
@@ -49,24 +49,24 @@ Python's standard library `socket` module can speak the PostgreSQL frontend/back
 
 ---
 
-### Option C — Lightweight HTTP Content API (Recommended)
+### Option C: Lightweight HTTP Content API (Recommended)
 
 A small, dedicated HTTP read API is added on the game server side (or as a standalone Python service collocated with the database) that exposes the help/shelp/lore content over HTTP. The web server replaces its filesystem reads with HTTP calls to this API using Python's built-in `urllib`.
 
 **Pros:**
 - Clean separation of concerns: game server owns content, web server queries it
-- Real-time reads — no staleness
-- `urllib` is standard library — zero new dependencies on the web server
+- Real-time reads, no staleness
+- `urllib` is standard library, zero new dependencies on the web server
 - The API can be used by other consumers (Discord bots, future tools) without coupling them to the DB schema
 - Authentication and rate-limiting can be layered onto the API endpoint
 
 **Cons:**
 - Requires building and running the API service
-- Web server becomes dependent on API availability — needs graceful degradation
+- Web server becomes dependent on API availability (needs graceful degradation)
 
 ---
 
-### Option D — PostgreSQL via psycopg2 (Accept the Dependency)
+### Option D: PostgreSQL via psycopg2 (Accept the Dependency)
 
 Relax the zero-dependency constraint and install `psycopg2-binary` alongside the web server. The web server queries PostgreSQL directly.
 
@@ -136,11 +136,11 @@ The web server's data access layer is cleanly isolated in three methods that nee
 
 | Current Method | Change |
 |----------------|--------|
-| `_build_reference_page()` — lists `~/acktng/help\|shelp\|lore/` | Replace `os.listdir()` with `GET /api/helps\|shelps\|lores` |
-| `_build_topic_page()` — reads `~/acktng/help\|shelp\|lore/<topic>` | Replace file read with `GET /api/helps\|shelps\|lores/<topic>` |
-| `_extract_first_lore_entry()` — parses raw lore block format | Keep as fallback; API returns pre-parsed JSON so parsing may be skipped |
+| `_build_reference_page()`: lists `~/acktng/help\|shelp\|lore/` | Replace `os.listdir()` with `GET /api/helps\|shelps\|lores` |
+| `_build_topic_page()`: reads `~/acktng/help\|shelp\|lore/<topic>` | Replace file read with `GET /api/helps\|shelps\|lores/<topic>` |
+| `_extract_first_lore_entry()`: parses raw lore block format | Keep as fallback; API returns pre-parsed JSON so parsing may be skipped |
 
-The existing `_topic_names_cache` and `_topic_content_cache` caches remain valid — they switch from `(mtime, content)` to `(timestamp, content)` with a configurable TTL (e.g., 60 seconds).
+The existing `_topic_names_cache` and `_topic_content_cache` caches remain valid; they switch from `(mtime, content)` to `(timestamp, content)` with a configurable TTL (e.g., 60 seconds).
 
 **Configuration** (`web_who_server.py`):
 
@@ -158,11 +158,11 @@ If the Content API is unreachable, the web server should:
 3. Log the error server-side
 4. **Not** crash or return a 500 to the user
 
-The existing try/except patterns in `_build_topic_page()` already handle missing files — these extend naturally to handle HTTP errors.
+The existing try/except patterns in `_build_topic_page()` already handle missing files; these extend naturally to handle HTTP errors.
 
 ### Content API Implementation Notes
 
-The Content API lives in the **DB repo** (`ackmudhistoricalarchive/acktng` alongside the schema and migration tooling), not in the game server repo. The schema and the API are tightly coupled — a column rename or table restructure should prompt an API update in the same PR, and that co-location enforces it. The game server has no stake in this service.
+The Content API lives in the **DB repo** (`ackmudhistoricalarchive/acktng` alongside the schema and migration tooling), not in the game server repo. The schema and the API are tightly coupled: a column rename or table restructure should prompt an API update in the same PR, and that co-location enforces it. The game server has no stake in this service.
 
 The Content API queries the tables from the DB schema proposal:
 
@@ -172,7 +172,7 @@ The Content API queries the tables from the DB schema proposal:
 | `/api/shelps/<topic>` | `SELECT keyword, level, text FROM shelp_entries WHERE keyword ILIKE $1` |
 | `/api/lores/<topic>` | `SELECT lt.keywords, le.text FROM lore_topics lt JOIN lore_entries le ON lt.id = le.topic_id WHERE lt.keywords ILIKE $1 AND le.faction IS NULL LIMIT 1` |
 
-The API should be **read-only** and bind to localhost or a private network interface only — not exposed to the public internet.
+The API should be **read-only** and bind to localhost or a private network interface only, not exposed to the public internet.
 
 ---
 

@@ -18,7 +18,7 @@ nginx
 
 | Domain | Project | Stack | Description |
 |---|---|---|---|
-| `ackmud.com` | `AckWeb.Client.Wol` | C# Blazor WASM | AHA: World of Lore — the new game |
+| `ackmud.com` | `AckWeb.Client.Wol` | C# Blazor WASM | AHA: World of Lore, the new game |
 | `aha.ackmud.com` | `AckWeb.Client.Aha` | C# Blazor WASM | ACKmud Historical Archive |
 | `bailes.us` | `personal/` | React + Vite + TypeScript | Personal landing page |
 
@@ -28,8 +28,8 @@ ASP.NET Core minimal API running at `localhost:5000`. Provides dynamic data for 
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/who` | Live player list — proxies the acktng game server's `/who` endpoint |
-| `GET /api/gsgp` | Game stats JSON — proxies the acktng game server's `/gsgp` endpoint |
+| `GET /api/who` | Live player list, proxies the acktng game server's `/who` endpoint |
+| `GET /api/gsgp` | Game stats JSON, proxies the acktng game server's `/gsgp` endpoint |
 | `GET /api/reference/{type}` | List help/shelp/lore topic names (optional `?q=` filter) |
 | `GET /api/reference/{type}/{topic}` | Return the text content of a specific topic file |
 
@@ -49,17 +49,17 @@ nginx proxies three secure WebSocket (WSS) ports to the game servers:
 
 ```
 web/
-├── AckWeb.sln                  — .NET solution
-├── AckWeb.Api/                 — ASP.NET Core minimal API
-├── AckWeb.Client.Aha/          — Blazor WASM client for aha.ackmud.com
-├── AckWeb.Client.Wol/          — Blazor WASM client for ackmud.com
-├── personal/                   — React + Vite SPA for bailes.us
+├── AckWeb.sln                  .NET solution
+├── AckWeb.Api/                 ASP.NET Core minimal API
+├── AckWeb.Client.Aha/          Blazor WASM client for aha.ackmud.com
+├── AckWeb.Client.Wol/          Blazor WASM client for ackmud.com
+├── personal/                   React + Vite SPA for bailes.us
 ├── nginx/
-│   └── ackmud.conf             — nginx site config
+│   └── ackmud.conf             nginx site config
 ├── systemd/
-│   └── ackweb.service          — systemd unit for AckWeb.Api
-├── img/                        — shared static images (terrain tiles, world map)
-├── setup.sh                    — installation script
+│   └── ackweb.service          systemd unit for AckWeb.Api
+├── img/                        shared static images (terrain tiles, world map)
+├── setup.sh                    installation script
 └── README.md
 ```
 

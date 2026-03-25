@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fix/re-obtain TLS certificates for ackmud.com when the full nginx config
-# cannot load (because certs are missing or expired) — the chicken-and-egg problem.
+# cannot load (because certs are missing or expired): the chicken-and-egg problem.
 #
 # This script:
 #   1. Ensures /var/www/certbot exists
@@ -35,7 +35,7 @@ for host in "$DOMAIN" "www.$DOMAIN" "aha.$DOMAIN"; do
     if dig +short "$host" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
         echo "  OK  $host → $(dig +short "$host" | head -1)"
     else
-        echo "  FAIL  $host — no A record found"
+        echo "  FAIL  $host: no A record found"
         all_ok=false
     fi
 done
