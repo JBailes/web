@@ -5,7 +5,7 @@
 Three related gaps in the web client's v2 UI:
 
 1. **No inventory window.** The `Inventory` tag is currently routed to the Main I/O panel as raw text. There is no structured floating window for it analogous to the Equipment window.
-2. **Thin character sheet.** The Character window shows HP/MP/MV bars, stats, classes, gold/exp/QP, and position — but omits many fields visible on the in-game `score` command (alignment, AC, hitroll/damroll, kills/deaths, age, etc.).
+2. **Thin character sheet.** The Character window shows HP/MP/MV bars, stats, classes, gold/exp/QP, and position, but omits many fields visible on the in-game `score` command (alignment, AC, hitroll/damroll, kills/deaths, age, etc.).
 3. **Appraise popup is equipment-only.** Item stat tooltips (the appraise popup) only appear when hovering over items in the Equipment window. Items on the ground (Room panel), in inventory, and carried by mobs are not hoverable for stats.
 
 ---
@@ -44,7 +44,7 @@ Add a new floating window (`inv-window`) that mirrors the Equipment window patte
 }
 ```
 
-Each item in `items` has the same shape as equipment slot items (used by the existing appraise popup). The inventory window renders a simple list: `short_descr` per row, hoverable for the appraise popup. Unlike the equipment window there are no slot labels — just item name rows.
+Each item in `items` has the same shape as equipment slot items (used by the existing appraise popup). The inventory window renders a simple list: `short_descr` per row, hoverable for the appraise popup. Unlike the equipment window there are no slot labels, just item name rows.
 
 **Toolbar button:** `Inv` added next to `Equip`. Hidden on v1 / disconnected, shown on v2 connect (like Equip and Char).
 
@@ -58,7 +58,7 @@ Each item in `items` has the same shape as equipment slot items (used by the exi
 
 ### 2. Expanded Character Sheet
 
-The `Score` tag payload is extended with additional fields. All new fields are optional — the client renders them when present and omits the section when absent, so older servers that don't send them continue to work.
+The `Score` tag payload is extended with additional fields. All new fields are optional; the client renders them when present and omits the section when absent, so older servers that don't send them continue to work.
 
 **New fields added to `Score` payload:**
 
@@ -98,7 +98,7 @@ These sections are appended after the existing content in `renderScorePanel`. Th
 
 **Room objects:** The `Room` payload's `objects` array is extended to optionally carry the same item-stats fields as equipment items (same shape as the `Inventory` items above). When an object entry includes these fields, hovering over it in the Room panel shows the appraise popup using inline data (no server roundtrip).
 
-Objects without inline stats (e.g. legacy server or unknown items) continue to behave as before — no popup, just clickable action dropdown.
+Objects without inline stats (e.g. legacy server or unknown items) continue to behave as before: no popup, just clickable action dropdown.
 
 **Inventory items:** Items in the inventory window include full stats by construction (see §1 payload above). Hover → appraise popup, same as equipment items.
 
@@ -110,7 +110,7 @@ Objects without inline stats (e.g. legacy server or unknown items) continue to b
 
 ## Affected Files
 
-- `web/templates/mud_client.html` — all changes are here:
+- `web/templates/mud_client.html`: all changes are here:
   - HTML: new `inv-window` block, new `toggle-inv-btn`
   - JS: `renderInventoryPanel()`, extended `renderScorePanel()`, extended `buildEntityRow()`, updated `handleMessage()`, `showV2Windows()`, `hideV2Windows()`, `loadWindowPositions()`, ResizeObserver block, init block
   - CSS (in `base.html`): `.inv-content` (same as `.equip-content`), `.char-row` / `.char-row-label` / `.char-row-val`, no other new classes needed

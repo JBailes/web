@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — install and configure the full web stack
+# setup.sh: install and configure the full web stack
 #
 # Run as root (or with sudo) from the web directory:
 #   sudo bash setup.sh

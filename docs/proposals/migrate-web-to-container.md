@@ -12,7 +12,7 @@ at 192.168.1.113. Clean up all web-related software from 192.168.1.103 so it
 runs only MUD game processes.
 
 The `/reference/help`, `/reference/shelp`, and `/reference/lore` routes are
-out of scope — they will be served via a separate db-service REST API in a
+out of scope; they will be served via a separate db-service REST API in a
 future migration. All other routes, including live game data (`/gsgp`, `/who`),
 continue to work by calling the game API on 192.168.1.103 over the LAN.
 
@@ -53,7 +53,7 @@ continue to work by calling the game API on 192.168.1.103 over the LAN.
 
 ## Changes Required
 
-### 1. `nginx/ackmud.conf` — WSS backend IPs
+### 1. `nginx/ackmud.conf`: WSS backend IPs
 WSS proxy blocks change from `127.0.0.1` to `192.168.1.103`:
 
 | Port | Before | After |
@@ -64,14 +64,14 @@ WSS proxy blocks change from `127.0.0.1` to `192.168.1.103`:
 
 HTTP/HTTPS proxy blocks are unchanged (still `http://127.0.0.1:8080`).
 
-### 2. `systemd/web-server.service` — `ACKTNG_GAME_URL`
+### 2. `systemd/web-server.service`: `ACKTNG_GAME_URL`
 Set the game API URL to the acktng host so `/gsgp` and `/who` work over LAN:
 
 ```ini
 Environment=ACKTNG_GAME_URL=http://192.168.1.103:8080
 ```
 
-### 3. CI/CD — GitHub Actions secret
+### 3. CI/CD: GitHub Actions secret
 Update the repository secret `DEPLOY_HOST` from `192.168.1.103` to
 `192.168.1.113`. No workflow file changes needed.
 
@@ -83,15 +83,15 @@ Update the repository secret `DEPLOY_HOST` from `192.168.1.103` to
 |------|--------|
 | `nginx/ackmud.conf` | WSS backends updated to `192.168.1.103` |
 | `systemd/web-server.service` | `ACKTNG_GAME_URL` env var added |
-| `scripts/setup-web-container.sh` | **New** — full setup script for 192.168.1.113 |
-| `scripts/cleanup-acktng-web.sh` | **New** — teardown script for 192.168.1.103 |
+| `scripts/setup-web-container.sh` | **New**: full setup script for 192.168.1.113 |
+| `scripts/cleanup-acktng-web.sh` | **New**: teardown script for 192.168.1.103 |
 | `docs/proposals/migrate-web-to-container.md` | This document |
 
 ---
 
 ## Migration Procedure
 
-### Phase 1 — Prepare new container (192.168.1.113)
+### Phase 1: Prepare new container (192.168.1.113)
 
 1. Provision the container; ensure it can reach 192.168.1.103 over the LAN.
 2. Open port 22 for SSH (needed for GitHub Actions deployment).
@@ -102,7 +102,7 @@ Update the repository secret `DEPLOY_HOST` from `192.168.1.103` to
    sudo bash ~/web/scripts/setup-web-container.sh
    ```
 
-### Phase 2 — Verify new container
+### Phase 2: Verify new container
 
 Before cutting over, test against the new container directly:
 
@@ -114,14 +114,14 @@ curl -k --resolve ackmud.com:443:192.168.1.113    https://ackmud.com/gsgp
 curl -k --resolve ackmud.com:443:192.168.1.113    https://ackmud.com/who
 ```
 
-### Phase 3 — Cut over
+### Phase 3: Cut over
 
 1. Update the `DEPLOY_HOST` GitHub Actions secret to `192.168.1.113`.
 2. Re-point router/firewall port forwarding for ports 80, 443, 9890, 8891,
    8892 from 192.168.1.103 → 192.168.1.113.
 3. Trigger a test deploy by pushing to `main`.
 
-### Phase 4 — Clean up acktng (192.168.1.103)
+### Phase 4: Clean up acktng (192.168.1.103)
 
 Once the new container is confirmed healthy:
 

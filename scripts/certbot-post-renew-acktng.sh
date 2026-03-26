@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # nginx reloads its TLS context on SIGHUP, so the MUD servers themselves do not
-# need direct cert access — they connect to nginx's local proxy.  We restart
+# need direct cert access; they connect to nginx's local proxy.  We restart
 # them anyway so any in-process TLS state is refreshed cleanly.
 if pkill -0 ack 2>/dev/null; then
     pkill -TERM ack || true

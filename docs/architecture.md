@@ -1,4 +1,4 @@
-# ACKMUD Historical Archive — Project Architecture
+# ACKMUD Historical Archive: Project Architecture
 
 > **Auto-generated:** This document is automatically updated by a git pre-commit hook whenever architecture-relevant files are modified (see [Keeping This Doc Updated](#keeping-this-doc-updated)).
 
@@ -19,7 +19,7 @@ The **ACKMUD Historical Archive and Live Reference Web Server** is a Python-base
 
 | Layer | Technology |
 |-------|------------|
-| Backend | Python 3 (standard library only — no external dependencies) |
+| Backend | Python 3 (standard library only, no external dependencies) |
 | HTTP Server | `http.server.ThreadingHTTPServer` |
 | Frontend | HTML5, CSS3, Vanilla JavaScript |
 | WebSocket Client | Browser-native WebSocket API |
@@ -84,18 +84,18 @@ web/
 ```
 ThreadingHTTPServer("0.0.0.0", PORT)
     └─→ WhoRequestHandler (one thread per request)
-        ├─ do_GET()   — handles all page and asset routes
-        └─ do_POST()  — returns 404 (not supported)
+        ├─ do_GET()   handles all page and asset routes
+        └─ do_POST()  returns 404 (not supported)
 ```
 
 **Configuration:**
 
 | Setting | Default | Override |
 |---------|---------|---------|
-| Host | `0.0.0.0` | — |
+| Host | `0.0.0.0` | - |
 | Port | `80` | `ACK_WEB_PORT` env var |
-| Web dir | directory of `web_who_server.py` | — |
-| Game data dir | `~/acktng/` | — |
+| Web dir | directory of `web_who_server.py` | - |
+| Game data dir | `~/acktng/` | - |
 
 ### Routing Table
 
@@ -146,9 +146,9 @@ All caches use threading locks and invalidate on file modification time:
 All pages extend the base layout via Python string substitution of `__TITLE__`, `__NAV__`, and `__BODY__` placeholders:
 
 ```
-<header>   — logo + site title
-<nav>      — navigation links (Home, Who's On, Reference, Stories, Map, Play)
-<main>     — page-specific content (injected by each _build_*_page() function)
+<header>   logo + site title
+<nav>      navigation links (Home, Who's On, Reference, Stories, Map, Play)
+<main>     page-specific content (injected by each _build_*_page() function)
 ```
 
 The base template embeds all global CSS using a CSS variable design system:
@@ -275,7 +275,7 @@ web_who_server.py
 
 ## Future Work
 
-See `docs/proposals/wss-mud-client.md` for a detailed design on adding TLS-encrypted WebSocket (WSS) support via a reverse proxy in front of the game servers. No web server code changes are required — the client already auto-selects `wss://` when served over HTTPS.
+See `docs/proposals/wss-mud-client.md` for a detailed design on adding TLS-encrypted WebSocket (WSS) support via a reverse proxy in front of the game servers. No web server code changes are required; the client already auto-selects `wss://` when served over HTTPS.
 
 ---
 
